@@ -1,0 +1,7 @@
+node_modules
+.next
+out
+dist
+.env*
+firebase-debug.log
+.DS_Store
