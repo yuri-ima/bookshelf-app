@@ -1,32 +1,23 @@
-// app/login/page.tsx
 "use client";
-
-import { useAuth } from "../_providers/AuthProvider";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "../_providers/AuthProvider";
 
 export default function LoginPage() {
   const { user, signInWithGoogle } = useAuth();
   const router = useRouter();
 
-  if (user) {
-    // 既ログインならホームへ
-    router.replace("/");
-  }
+  useEffect(() => {
+    if (user) router.replace("/");
+  }, [user, router]);
+
+  if (user === undefined) return <main>Loading...</main>;
+  if (user) return <main>Redirecting...</main>;
 
   return (
-    <main className="min-h-dvh flex items-center justify-center p-6">
-      <div className="w-full max-w-sm rounded-xl border p-6 space-y-4">
-        <h1 className="text-xl font-semibold text-center">ログイン</h1>
-        <button
-          className="w-full rounded-lg border px-4 py-2"
-          onClick={async () => {
-            await signInWithGoogle();
-            router.replace("/");
-          }}
-        >
-          Googleでログイン
-        </button>
-      </div>
+    <main style={{ padding: 24 }}>
+      <h1>ログイン</h1>
+      <button onClick={() => signInWithGoogle()}>Googleでログイン</button>
     </main>
   );
 }
