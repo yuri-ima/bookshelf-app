@@ -2,6 +2,7 @@
 "use client";
 import { useAuth } from "@/app/_providers/AuthProvider";
 import { db } from "@/lib/db";
+import { toDriveDirect } from "@/lib/utils";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -19,7 +20,7 @@ export default function NewAlbumPage() {
     await addDoc(collection(db, "albums"), {
       ownerId: user.uid,
       title,
-      coverUrl: coverUrl || null,
+      coverUrl: toDriveDirect(coverUrl) || null,
       createdAt: serverTimestamp(),
     });
     router.replace(`/`);

@@ -2,7 +2,13 @@
 "use client";
 import { db } from "@/lib/db";
 import type { Album } from "@/types/albums";
-import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import {
+  collection,
+  onSnapshot,
+  orderBy,
+  query,
+  where,
+} from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "./_providers/AuthProvider";
@@ -24,7 +30,10 @@ export default function Home() {
       orderBy("createdAt", "desc")
     );
     const unsub = onSnapshot(q, (snap) => {
-      const list: Album[] = snap.docs.map((d:any) => ({ id: d.id, ...d.data() }));
+      const list: Album[] = snap.docs.map((d: any) => ({
+        id: d.id,
+        ...d.data(),
+      }));
       setAlbums(list);
     });
     return () => unsub();
@@ -38,19 +47,37 @@ export default function Home() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">本棚</h1>
         <div className="flex gap-2">
-          <button className="border rounded-lg px-3 py-1" onClick={() => router.push("/albums/new")}>新規アルバム</button>
-          <button className="border rounded-lg px-3 py-1" onClick={signOutApp}>ログアウト</button>
+          <button
+            className="border rounded-lg px-3 py-1"
+            onClick={() => router.push("/albums/new")}
+          >
+            新規アルバム
+          </button>
+          <button className="border rounded-lg px-3 py-1" onClick={signOutApp}>
+            ログアウト
+          </button>
         </div>
       </div>
       <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
-        {albums.map(a => (
+        {albums.map((a) => (
           <button
             key={a.id}
-            onClick={() => router.push(`/albums/${a.id}`)}
+            onClick={() => router.push(`/albums/${a.id}/viewer`)} // ← 詳細ではなく viewer に
             className="text-left border rounded-xl p-3 hover:shadow"
           >
             <div className="aspect-[4/3] bg-gray-100 rounded-lg mb-2 overflow-hidden">
-              {a.coverUrl ? <img src={a.coverUrl} alt="" className="w-full h-full object-cover" /> : null}
+              {a.coverUrl ? (
+                <img
+                  src={a.coverUrl}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-full h-full grid place-items-center text-gray-400">
+                  No Cover
+                </div>
+              )}
             </div>
             <div className="font-medium">{a.title}</div>
           </button>
