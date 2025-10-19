@@ -5,4 +5,5 @@ export type Album = {
   title: string;
   coverUrl?: string;
   createdAt: number; // Date.now()
+  order?: number;
 };

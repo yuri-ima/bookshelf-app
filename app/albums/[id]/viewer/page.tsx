@@ -1,7 +1,7 @@
 "use client";
 
 import { db } from "@/lib/db";
-import dayjs from "dayjs";
+import { formatDate } from "@/lib/utils";
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import { AnimatePresence, motion } from "framer-motion";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -11,80 +11,87 @@ import { useSwipeable } from "react-swipeable";
 type Memory = {
   id: string;
   imageUrl: string;
-  title?: string;
-  note?: string;
-  takenAt?: string; // ISO
+  title?: string; // ← 任意
+  note?: string; // ← 今は表示しない
+  takenAt?: string; // ISO（例: 2025-10-12T10:30）
 };
 
 export default function AlbumViewer() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [items, setItems] = useState<Memory[]>([]);
-  const [index, setIndex] = useState(0);
   const search = useSearchParams();
   const startIndex = parseInt(search.get("i") ?? "0", 10) || 0;
 
-  // Firestore: takenAt 昇順で読む
+  const [items, setItems] = useState<Memory[]>([]);
+  const [index, setIndex] = useState(0);
+  const [zoom, setZoom] = useState(false);
+
   useEffect(() => {
-    const q = query(
-      collection(db, "albums", id, "memories"),
-      orderBy("takenAt", "asc")
+    const base = collection(db, "albums", id, "memories");
+
+    // まず order 昇順で取得
+    const qOrder = query(base, orderBy("order", "asc"));
+    const unsub1 = onSnapshot(
+      qOrder,
+      (s) => {
+        const arr = s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        // order がない古いデータだけのアルバムだと、ここで全件 order: undefined のまま来ることもある
+        setItems(arr);
+        setIndex(0);
+      },
+      (err) => {
+        console.error("order query failed, fallback to takenAt:", err);
+        // フォールバック: takenAt 昇順
+        const qTaken = query(base, orderBy("takenAt", "asc"));
+        const unsub2 = onSnapshot(qTaken, (s2) => {
+          const arr = s2.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+          setItems(arr);
+          setIndex(0);
+        });
+        // クリーンアップ
+        return () => unsub2();
+      }
     );
-    const unsub = onSnapshot(q, (s) => {
-      const arr = s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-      setItems(arr);
-      setIndex(0);
-    });
-    return () => unsub();
+
+    return () => unsub1();
   }, [id]);
 
-  // ナビゲーション
+  useEffect(() => {
+    if (items.length > 0)
+      setIndex(Math.min(Math.max(0, startIndex), items.length - 1));
+  }, [items.length, startIndex]);
+
   const next = useCallback(
     () => setIndex((i) => Math.min(i + 1, items.length - 1)),
     [items.length]
   );
   const prev = useCallback(() => setIndex((i) => Math.max(i - 1, 0)), []);
-  const [showInfo, setShowInfo] = useState(true); // ← 情報パネルの表示フラグを追加
-  const toggleInfo = useCallback(() => setShowInfo((v) => !v), []);
+  const toggleZoom = useCallback(() => setZoom((z) => !z), []);
 
-  // キーボード操作
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight") next();
       if (e.key === "ArrowLeft") prev();
       if (e.key === "Escape") router.back();
+      if (e.key === " ") {
+        e.preventDefault();
+        toggleZoom();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [next, prev, router]);
+  }, [next, prev, toggleZoom, router]);
 
-  // スワイプ
   const bind = useSwipeable({
     onSwipedLeft: next,
     onSwipedRight: prev,
     trackMouse: true,
   });
 
-  // 事前読み込み（次の1枚）
-  useEffect(() => {
-    const n = items[index + 1]?.imageUrl;
-    if (!n) return;
-    const img = new Image();
-    img.referrerPolicy = "no-referrer";
-    img.src = n;
-  }, [index, items]);
-
-  useEffect(() => {
-    // 取得後に開始ページを反映
-    if (items.length > 0) {
-      setIndex(Math.min(Math.max(0, startIndex), items.length - 1));
-    }
-  }, [items.length, startIndex]);
-
   if (!items.length) {
     return (
-      <main className="min-h-dvh grid place-items-center">
-        <div className="text-gray-500">読み込み中… / 写真がありません</div>
+      <main className="min-h-dvh grid place-items-center bg-black text-white">
+        <div className="text-gray-400">読み込み中… / 写真がありません</div>
       </main>
     );
   }
@@ -92,9 +99,9 @@ export default function AlbumViewer() {
   const current = items[index];
 
   return (
-    <main className="fixed inset-0 bg-black text-white select-none">
-      {/* ヘッダー */}
-      <div className="absolute top-0 inset-x-0 p-3 flex items-center justify-between">
+    <main className="fixed inset-0 bg-black text-white grid grid-rows-[auto,minmax(0,1fr),auto] min-h-dvh">
+      {/* ヘッダー：左=戻る／中央=タイトル+日付／右=ページ数＋編集 */}
+      <header className="flex items-center justify-between px-3 py-2">
         <div className="flex items-center gap-2">
           <button
             className="px-3 py-1 rounded bg-white/10 hover:bg-white/20"
@@ -103,32 +110,71 @@ export default function AlbumViewer() {
             戻る
           </button>
         </div>
+
+        {/* ここにタイトル＆日付（タイトルは任意で非表示可） */}
+        <div className="text-center">
+          {current.title ? (
+            <div className="text-sm md:text-base font-semibold leading-tight">
+              {current.title}
+            </div>
+          ) : null}
+          <div className="text-xs md:text-sm text-white/70">
+            {formatDate(current.takenAt)}
+          </div>
+        </div>
+
         <div className="flex items-center gap-2">
           <div className="text-sm opacity-80">
             {index + 1} / {items.length}
           </div>
           <button
             className="px-3 py-1 rounded bg-white/10 hover:bg-white/20"
-            onClick={() => router.push(`/albums/${id}/edit`)} // ← 編集へ
+            onClick={() => router.push(`/albums/${id}/edit?i=${index}`)}
           >
             編集
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* 画像表示エリア */}
-      <div
-        className="w-full h-full flex items-center justify-center"
-        onClick={toggleInfo} // ← 画面タップで情報の表示切替
+      {/* 画像エリア：タップでズーム */}
+      <section
+        className="relative w-full h-full flex items-center justify-center select-none overflow-hidden"
         {...bind}
       >
+        {index > 0 && (
+          <button
+            className="absolute left-0 top-1/2 -translate-y-1/2 p-4 text-3xl opacity-70 hover:opacity-100"
+            onClick={prev}
+            aria-label="前へ"
+          >
+            ‹
+          </button>
+        )}
+        {index < items.length - 1 && (
+          <button
+            className="absolute right-0 top-1/2 -translate-y-1/2 p-4 text-3xl opacity-70 hover:opacity-100"
+            onClick={next}
+            aria-label="次へ"
+          >
+            ›
+          </button>
+        )}
+
         <AnimatePresence mode="wait" initial={false}>
           <motion.img
             key={current.id}
             src={current.imageUrl}
             alt={current.title ?? ""}
             referrerPolicy="no-referrer"
-            className="max-w-full max-h-[90dvh] object-contain"
+            className={`object-contain ${zoom ? "max-w-none" : "max-w-full"} ${
+              zoom ? "max-h-none" : "max-h-full"
+            }`}
+            style={
+              zoom
+                ? { transform: "scale(1.4)", cursor: "zoom-out" }
+                : { cursor: "zoom-in" }
+            }
+            onClick={toggleZoom}
             initial={{ x: 60, opacity: 0.6 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: -60, opacity: 0.6 }}
@@ -145,75 +191,26 @@ export default function AlbumViewer() {
             }}
           />
         </AnimatePresence>
-      </div>
+      </section>
 
-      {/* 情報パネル（説明） */}
-      <AnimatePresence>
-        {showInfo && (
-          <motion.div
-            className="absolute inset-x-0 bottom-0 p-4 md:p-6 bg-gradient-to-t from-black/70 via-black/30 to-transparent"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 16 }}
-          >
-            <div className="max-w-4xl mx-auto space-y-2">
-              {/* タイトル */}
-              {current.title ? (
-                <h2 className="text-lg md:text-xl font-semibold leading-tight">
-                  {current.title}
-                </h2>
-              ) : null}
-
-              {/* メモ */}
-              {current.note ? (
-                <p className="text-sm md:text-base text-white/90 whitespace-pre-wrap">
-                  {current.note}
-                </p>
-              ) : null}
-
-              {/* 撮影日時 */}
-              {current.takenAt ? (
-                <div className="text-xs md:text-sm text-white/70">
-                  {dayjs(current.takenAt).format("YYYY/MM/DD HH:mm")}
-                </div>
-              ) : null}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ナビゲーション矢印（PC向け） */}
-      {index > 0 && (
-        <button
-          className="absolute left-0 top-1/2 -translate-y-1/2 p-4 text-3xl opacity-70 hover:opacity-100"
-          onClick={prev}
-          aria-label="前へ"
-        >
-          ‹
-        </button>
-      )}
-      {index < items.length - 1 && (
-        <button
-          className="absolute right-0 top-1/2 -translate-y-1/2 p-4 text-3xl opacity-70 hover:opacity-100"
-          onClick={next}
-          aria-label="次へ"
-        >
-          ›
-        </button>
-      )}
-
-      {/* ページインジケータ */}
-      <div className="absolute bottom-0 inset-x-0 p-3 flex items-center justify-center gap-1">
-        {items.map((_, i) => (
-          <span
-            key={i}
-            className={`h-1.5 rounded-full transition-all ${
-              i === index ? "w-6 bg-white" : "w-2 bg-white/40"
-            }`}
-            onClick={() => setIndex(i)}
-          />
-        ))}
-      </div>
+      {/* 説明フッター（写真とは別領域／常時表示） */}
+      <footer
+        className="px-4 py-3 md:px-6 md:py-4 border-t border-white/10
+             bg-black text-white"
+      >
+        <div className="max-w-4xl mx-auto">
+          {current.note ? (
+            <p
+              className="text-sm md:text-base whitespace-pre-wrap text-white/90
+                    max-h-40 md:max-h-56 overflow-y-auto"
+            >
+              {current.note}
+            </p>
+          ) : (
+            <div className="text-sm text-white/50">説明はありません</div>
+          )}
+        </div>
+      </footer>
     </main>
   );
 }
