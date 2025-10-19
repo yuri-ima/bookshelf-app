@@ -1,10 +1,10 @@
 // app/albums/new/page.tsx（Storageなし版）
 "use client";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "../../_providers/AuthProvider";
+import { useAuth } from "@/app/_providers/AuthProvider";
 import { db } from "@/lib/db";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 export default function NewAlbumPage() {
   const { user } = useAuth();

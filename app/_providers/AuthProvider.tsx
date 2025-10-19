@@ -1,12 +1,11 @@
-// app/_providers/AuthProvider.tsx
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, User } from "firebase/auth";
 import { app } from "@/lib/firebase";
+import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, User } from "firebase/auth";
+import { createContext, ReactNode, useContext, useEffect, useState } from "react";
 
 type AuthContextType = {
-  user: User | null | undefined; // undefined = 初期化中
+  user: User | null | undefined; // undefined: ローディング中
   signInWithGoogle: () => Promise<void>;
   signOutApp: () => Promise<void>;
 };

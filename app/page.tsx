@@ -1,12 +1,11 @@
 // app/page.tsx（中身だけ差し替え例）
 "use client";
-import { useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "./_providers/AuthProvider";
 import { db } from "@/lib/db";
-import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
-import { useState } from "react";
 import type { Album } from "@/types/albums";
+import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useAuth } from "./_providers/AuthProvider";
 
 export default function Home() {
   const { user, signOutApp } = useAuth();
